@@ -65,14 +65,45 @@ def refresh_tokens():
     else:
         return False
 
+def hash_list(list):
+    return hashlib.sha256(json.dumps(list).encode()).hexdigest()
 
 def get_mal_list(user_name: str):
     url = f'https://api.myanimelist.net/v2/users/{user_name}/animelist'
     headers = {'Authorization': f'Bearer {MAL_ACCESS_TOKEN}'}
-    r = requests.get(url, headers=headers)
+    params = {'limit': 1000}
+    r = requests.get(url, headers=headers, params=params)
+
+    mal_list = r.json()
 
     if r.ok:
-        print('ok')
+        print('List successfully found')
+        if not os.path.exists('Responses/mal_list.json'):
+            print('No list found, creating new')
+            with open('Responses/hash.txt', 'w') as f:
+                f.write(hash_list(mal_list))
+
+            with open('Responses/mal_list.json', 'w') as f:
+                json.dump(mal_list, f, indent=2)
+            print('New list saved')
+
+        else:
+            print('List found, checking for updates')
+            new_hash = hash_list(mal_list)
+            with open('Responses/hash.txt', 'r') as f:
+                old_hash = f.read()
+
+            if new_hash != old_hash:
+                print('Update found, saving new list')
+                with open('Responses/mal_list.json', 'w') as f:
+                    json.dump(mal_list, f, indent=2)
+                    print('New list saved')
+
+                with open('Responses/hash.txt', 'w') as f:
+                    f.write(new_hash)
+            else:
+                print('No update found')
+
     else:
         print(f'Error: {r.status_code}')
 
