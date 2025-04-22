@@ -25,6 +25,7 @@ class MALClient:
         })
 
         if response.ok:
+            print("Valid access token")
             return True
         elif response.status_code == 401:
             print("Error: Invalid access token")
@@ -129,11 +130,11 @@ class MALClient:
             print(f'Error downloading image: {anime_id}->{r.status_code}')
             return True
 
-    def download_images(self, num=5):
+    def download_images(self, num=20):
         mal_list_path = f'{self.responses_dir}/mal_list.json'
         with open(mal_list_path, 'r') as f:
             mal_list = json.load(f)
-        for anime in range(num):
+        for anime in range(20):
             anime_id = mal_list['data'][anime]['node']['id']
             img_path = f'{self.images_dir}/{anime_id}.jpg'
             if not os.path.exists(img_path):
