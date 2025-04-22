@@ -82,7 +82,7 @@ class MALClient:
 
     @staticmethod
     def hash_list(mal_list):
-        return hashlib.sha256(json.dumps(mal_list).encode()).hexdigest()
+        return hashlib.sha256(json.dumps(mal_list['data'], sort_keys=True).encode()).hexdigest()
 
     def get_mal_list(self, user_name: str):
         url = f'https://api.myanimelist.net/v2/users/{user_name}/animelist'

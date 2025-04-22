@@ -67,6 +67,11 @@ class App(ctk.CTk):
         super().__init__()
 
         client = mal_client
+        if client.is_valid_token():
+            client.get_mal_list('xavion03')
+            client.download_images()
+        else:
+            print("Invalid access token")
 
         # App Frame
         self.title("Tier List")
@@ -81,11 +86,5 @@ class App(ctk.CTk):
 
 
 client = MALClient()
-if client.is_valid_token():
-    client.get_mal_list('xavion03')
-    client.download_images()
-else:
-    print("Invalid access token")
-
 app = App(client)
 app.mainloop()
