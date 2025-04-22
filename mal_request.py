@@ -130,18 +130,94 @@ class MALClient:
             print(f'Error downloading image: {anime_id}->{r.status_code}')
             return True
 
-    def download_images(self, num=20):
+    def download_images(self):
         mal_list_path = f'{self.responses_dir}/mal_list.json'
         with open(mal_list_path, 'r') as f:
             mal_list = json.load(f)
-        for anime in range(20):
-            anime_id = mal_list['data'][anime]['node']['id']
+        for anime in mal_list['data']:
+            anime_id = anime["node"]["id"]
             img_path = f'{self.images_dir}/{anime_id}.jpg'
             if not os.path.exists(img_path):
-                image_url = mal_list['data'][anime]['node']['main_picture']['large']
+                print(f'Downloading image: {anime_id}')
+                image_url = anime['node']['main_picture']['large']
                 download_error = self.download_image(image_url, anime_id)
                 if download_error:
                     break
-                sleep(0.50)
-            else:
-                print(f'Image already exists: {anime_id}')
+                sleep(0.30)
+
+    def anime_info_query(self, anime_id):
+        url = f'https://api.myanimelist.net/v2/anime/{anime_id}'
+        headers = {'Authorization': f'Bearer {self.MAL_ACCESS_TOKEN}'}
+        params = {'fields': 'title,mean,rank,popularity,genres,start_season,opening_themes'}
+        r = requests.get(url, headers=headers, params=params)
+        if r.ok:
+            print(f'Anime info found: {anime_id}')
+            return r.json()
+        else:
+            print(f'Error: {r.status_code}')
+            return None
+
+    def get_anime_info(self):
+        mal_list_path = f'{self.responses_dir}/mal_list.json'
+        info_json_path = f'{self.responses_dir}/info.json'
+        with open(mal_list_path, 'r') as f:
+            mal_list = json.load(f)
+
+        # Load or initialize info_dict
+        if os.path.exists(info_json_path):
+            print('Info file found, updating')
+            with open(info_json_path, 'r', encoding='utf-8') as f:
+                try:
+                    info_dict = json.load(f)
+                except json.JSONDecodeError:
+                    info_dict = {}
+        else:
+            print('No info file found, creating new')
+            info_dict = {}
+
+        updated = False
+        for anime in mal_list['data']:
+            anime_id = str(anime["node"]["id"])
+            if anime_id not in info_dict:
+                print(f'Adding {anime_id} to info dict')
+                anime_info = self.anime_info_query(anime["node"]["id"])
+                if anime_info:
+                    info_dict[anime_id] = anime_info
+                    updated = True
+                sleep(0.30)
+
+        if updated or not os.path.exists(info_json_path):
+            with open(info_json_path, 'w', encoding='utf-8') as f:
+                json.dump(info_dict, f, ensure_ascii=False, indent=2)
+
+    def cache_info(self):
+        info_json_path = f'{self.responses_dir}/info.json'
+        try:
+            with open(info_json_path, 'r', encoding='utf-8') as f:
+                info = json.load(f)
+
+            self._info_dict = info
+            print("Info dict cached successfully")
+
+        except FileNotFoundError:
+            print("Info file not found")
+
+
+    def get_info(self, id):
+        try:
+            info = self._info_dict[str(id)]
+            return info
+        except KeyError:
+            print(f'Anime info not found for {id}')
+
+
+if __name__ == '__main__':
+    client = MALClient()
+    if client.is_valid_token():
+        client.get_mal_list('x4061691')
+        client.download_images()
+        client.get_anime_info()
+        client.cache_info()
+        print(client.get_info(5081))
+    else:
+        print("Invalid access token")
