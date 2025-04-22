@@ -3,7 +3,9 @@ import customtkinter as ctk
 from customtkinter import CTkImage
 from mal_request import MALClient
 from PIL import Image
+from logger import get_logger
 import os
+import re
 
 class TierImage():
     pass
@@ -69,7 +71,6 @@ class BottomFrame(ctk.CTkScrollableFrame):
             openings_scrollable.grid_rowconfigure("all", weight=1)
             i = 0
             for opening in info['opening_themes']:
-                print(opening['text'])
                 opening_label = ctk.CTkLabel(openings_scrollable, text=opening['text'], font=("Arial", 16))
                 opening_label.configure(
                     compound="center",
@@ -82,7 +83,9 @@ class BottomFrame(ctk.CTkScrollableFrame):
             form_frame = ctk.CTkFrame(popup, fg_color="#ffe5d9", corner_radius=0)
             form_frame.place(relx=0, rely=0.3, relwidth=1, relheight=0.7)
 
-
+        def edit_opening_s(opening_text):
+            for opening in opening_text:
+               opening['text'] = re.sub(r'#\d: |\([^()]*\)', '', opening['text'])
 
         MAX_PER_ROW = 10  # Set how many buttons per row
         row = 0
@@ -101,6 +104,7 @@ class BottomFrame(ctk.CTkScrollableFrame):
                     hover_color="#071f35"
                 )
                 image_button.info_dict = self.client.get_info(entry.name.replace(".jpg", ""))
+                edit_opening_s(image_button.info_dict['opening_themes'])
                 image_button.configure(command=lambda info=image_button.info_dict: show_popup(info))
 
                 image_button.grid(row=row, column=col, pady=1, padx=1)
@@ -116,18 +120,19 @@ class BottomFrame(ctk.CTkScrollableFrame):
 
 
 class App(ctk.CTk):
-    def __init__(self, mal_client):
+    def __init__(self, mal_client, logger):
         super().__init__()
 
+        self.logger = logger
         client = mal_client
         if client.is_valid_token():
-            client.get_mal_list('x4061691')
+            client.get_mal_list()
             client.download_images()
             client.get_anime_info()
             client.cache_info()
-            print("App Initialization Finished")
+            self.logger.info("MAL Initialization Finished")
         else:
-            print("Invalid access token")
+            self.logger.warning("Invalid access token")
 
         # App Frame
         self.title("Tier List")
@@ -142,5 +147,6 @@ class App(ctk.CTk):
 
 
 client = MALClient()
-app = App(client)
+logger = get_logger(__name__)
+app = App(client, logger)
 app.mainloop()

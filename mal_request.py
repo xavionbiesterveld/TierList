@@ -5,9 +5,10 @@ import hashlib
 from dotenv import load_dotenv
 import os
 from time import sleep
+from logger import get_logger
 
 class MALClient:
-    def __init__(self, env_path='MAL_KEY.env'):
+    def __init__(self, user_name='x4061691', env_path='MAL_KEY.env'):
         load_dotenv(env_path)
         self.env_path = env_path
         self.MAL_CLIENT_ID = os.getenv('MAL_CLIENT_ID')
@@ -15,6 +16,8 @@ class MALClient:
         self.MAL_REFRESH_TOKEN = os.getenv('MAL_REFRESH_TOKEN')
         self.responses_dir = 'Responses'
         self.images_dir = 'Images'
+        self.user_name = user_name
+        self.logger = get_logger(__name__)
         os.makedirs(self.responses_dir, exist_ok=True)
         os.makedirs(self.images_dir, exist_ok=True)
 
@@ -25,19 +28,19 @@ class MALClient:
         })
 
         if response.ok:
-            print("Valid access token")
+            self.logger.info("Valid access token")
             return True
         elif response.status_code == 401:
-            print("Error: Invalid access token")
-            print("Attempting to refresh tokens")
+            self.logger.warning("Error: Invalid access token")
+            self.logger.warning("Attempting to refresh tokens")
             try:
                 self.refresh_tokens()
                 return True
-            except:
-                print("Error refreshing token")
+            except requests.HTTPError as e:
+                self.logger.error("Error refreshing token: {e}")
                 return False
         else:
-            print(f"Error: {response.status_code}")
+            self.logger.error(f"Error validating token: {response.status_code}")
             return False
 
     def refresh_tokens(self):
@@ -73,72 +76,104 @@ class MALClient:
                 for key, value in env_vars.items():
                     f.write(f"{key}={value}\n")
         except IOError as e:
-            print(f"Error writing to {self.env_path}: {e}")
+            self.logger.error(f"Error writing tokens to {self.env_path}: {e}")
 
         self.MAL_ACCESS_TOKEN = access_token
         self.MAL_REFRESH_TOKEN = refresh_token
 
-        print("Tokens refreshed successfully")
+        self.logger.info("Tokens refreshed successfully")
 
     @staticmethod
     def hash_list(mal_list):
         return hashlib.sha256(json.dumps(mal_list['data'], sort_keys=True).encode()).hexdigest()
 
-    def get_mal_list(self, user_name: str):
-        url = f'https://api.myanimelist.net/v2/users/{user_name}/animelist'
+    def get_mal_list(self):
+        url = f'https://api.myanimelist.net/v2/users/{self.user_name}/animelist'
         headers = {'Authorization': f'Bearer {self.MAL_ACCESS_TOKEN}'}
         params = {'limit': 1000}
         r = requests.get(url, headers=headers, params=params)
         mal_list = r.json()
 
         if r.ok:
-            print('List successfully found')
+            self.logger.info('List successfully found')
             mal_list_path = f'{self.responses_dir}/mal_list.json'
             hash_path = f'{self.responses_dir}/hash.txt'
             if not os.path.exists(mal_list_path):
-                print('No list found, creating new')
-                with open(hash_path, 'w') as f:
-                    f.write(self.hash_list(mal_list))
-                with open(mal_list_path, 'w') as f:
-                    json.dump(mal_list, f, indent=2)
-                print('New list saved')
-            else:
-                print('List found, checking for updates')
-                new_hash = self.hash_list(mal_list)
-                with open(hash_path, 'r') as f:
-                    old_hash = f.read()
-                if new_hash != old_hash:
-                    print('Update found, saving new list')
+                self.logger.info('No list found, creating new')
+                try:
+                    with open(hash_path, 'w') as f:
+                        f.write(self.hash_list(mal_list))
+                except IOError as e:
+                     self.logger.error(f"Error writing hash to {hash_path}: {e}")
+
+                try:
                     with open(mal_list_path, 'w') as f:
                         json.dump(mal_list, f, indent=2)
-                        print('New list saved')
-                    with open(hash_path, 'w') as f:
-                        f.write(new_hash)
+                except IOError as e:
+                    self.logger.error(f"Error writing list to {mal_list_path}: {e}")
+
+                self.logger.info('New list saved')
+
+            else:
+                self.logger.info('Checking for updates')
+
+                new_hash = self.hash_list(mal_list)
+
+                try:
+                    with open(hash_path, 'r') as f:
+                        old_hash = f.read()
+                except IOError as e:
+                        self.logger.error(f"Error reading hash from {hash_path}: {e}")
+
+                if new_hash != old_hash:
+                    self.logger.info('Update found, saving new list')
+                    try:
+                        with open(mal_list_path, 'w') as f:
+                            json.dump(mal_list, f, indent=2)
+                            self.logger.info('New list saved')
+                    except IOError as e:
+                        self.logger.error(f"Error writing list to {mal_list_path}: {e}")
+
+                    try:
+                        with open(hash_path, 'w') as f:
+                            f.write(new_hash)
+                    except IOError as e:
+                        self.logger.error(f"Error writing hash to {hash_path}: {e}")
                 else:
-                    print('No update found')
+                    self.logger.info('No update found')
         else:
-            print(f'Error: {r.status_code}')
+            try:
+                r.raise_for_status()
+            except requests.HTTPError as e:
+                self.logger.error(f"Error fetching list: {e}")
+                return None
 
     def download_image(self, image_url, anime_id):
         r = requests.get(image_url)
         if r.ok:
-            print(f'Image downloaded successfully: {anime_id}')
+            self.logger.debug(f'Image downloaded successfully: {anime_id}')
             with open(f'{self.images_dir}/{anime_id}.jpg', 'wb') as f:
                 f.write(r.content)
             return False
         else:
-            print(f'Error downloading image: {anime_id}->{r.status_code}')
+            self.logger.warning(f'Error downloading image: {anime_id}->{r.status_code}')
             return True
 
     def download_images(self):
         mal_list_path = f'{self.responses_dir}/mal_list.json'
-        with open(mal_list_path, 'r') as f:
-            mal_list = json.load(f)
+        try:
+            with open(mal_list_path, 'r') as f:
+                mal_list = json.load(f)
+        except FileNotFoundError as e:
+            self.logger.error(f"Error opening list file: {e}")
+        except IOError as e:
+            self.logger.error(f"Error reading list file: {e}")
+
         for anime in mal_list['data']:
             anime_id = anime["node"]["id"]
             img_path = f'{self.images_dir}/{anime_id}.jpg'
             if not os.path.exists(img_path):
-                print(f'Downloading image: {anime_id}')
+                self.logger.info(f'Downloading image: {anime_id}')
                 image_url = anime['node']['main_picture']['large']
                 download_error = self.download_image(image_url, anime_id)
                 if download_error:
@@ -151,10 +186,10 @@ class MALClient:
         params = {'fields': 'title,mean,rank,popularity,genres,start_season,opening_themes'}
         r = requests.get(url, headers=headers, params=params)
         if r.ok:
-            print(f'Anime info found: {anime_id}')
+            self.logger.debug(f'Anime info found: {anime_id}')
             return r.json()
         else:
-            print(f'Error: {r.status_code}')
+            self.logger.error(f'Error: {r.status_code}')
             return None
 
     def get_anime_info(self):
@@ -165,21 +200,21 @@ class MALClient:
 
         # Load or initialize info_dict
         if os.path.exists(info_json_path):
-            print('Info file found, updating')
+            self.logger.info('Info file found, updating')
             with open(info_json_path, 'r', encoding='utf-8') as f:
                 try:
                     info_dict = json.load(f)
                 except json.JSONDecodeError:
                     info_dict = {}
         else:
-            print('No info file found, creating new')
+            self.logger.info('No info file found, creating new')
             info_dict = {}
 
         updated = False
         for anime in mal_list['data']:
             anime_id = str(anime["node"]["id"])
             if anime_id not in info_dict:
-                print(f'Adding {anime_id} to info dict')
+                self.logger.info(f'Adding {anime_id} to info dict')
                 anime_info = self.anime_info_query(anime["node"]["id"])
                 if anime_info:
                     info_dict[anime_id] = anime_info
@@ -197,24 +232,23 @@ class MALClient:
                 info = json.load(f)
 
             self._info_dict = info
-            print("Info dict cached successfully")
+            self.logger.info("Info dict cached successfully")
 
         except FileNotFoundError:
-            print("Info file not found")
-
+            self.logger.error("Info file not found")
 
     def get_info(self, id):
         try:
             info = self._info_dict[str(id)]
             return info
         except KeyError:
-            print(f'Anime info not found for {id}')
+           self.logger.error(f'Anime info not found for {id}')
 
 
 if __name__ == '__main__':
     client = MALClient()
     if client.is_valid_token():
-        client.get_mal_list('x4061691')
+        client.get_mal_list()
         client.download_images()
         client.get_anime_info()
         client.cache_info()
