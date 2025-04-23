@@ -77,6 +77,7 @@ class MALClient:
                     f.write(f"{key}={value}\n")
         except IOError as e:
             self.logger.error(f"Error writing tokens to {self.env_path}: {e}")
+            return
 
         self.MAL_ACCESS_TOKEN = access_token
         self.MAL_REFRESH_TOKEN = refresh_token
@@ -104,13 +105,15 @@ class MALClient:
                     with open(hash_path, 'w') as f:
                         f.write(self.hash_list(mal_list))
                 except IOError as e:
-                     self.logger.error(f"Error writing hash to {hash_path}: {e}")
+                    self.logger.error(f"Error writing hash to {hash_path}: {e}")
+                    return
 
                 try:
                     with open(mal_list_path, 'w') as f:
                         json.dump(mal_list, f, indent=2)
                 except IOError as e:
                     self.logger.error(f"Error writing list to {mal_list_path}: {e}")
+                    return
 
                 self.logger.info('New list saved')
 
@@ -124,6 +127,7 @@ class MALClient:
                         old_hash = f.read()
                 except IOError as e:
                         self.logger.error(f"Error reading hash from {hash_path}: {e}")
+                        return
 
                 if new_hash != old_hash:
                     self.logger.info('Update found, saving new list')
@@ -133,12 +137,14 @@ class MALClient:
                             self.logger.info('New list saved')
                     except IOError as e:
                         self.logger.error(f"Error writing list to {mal_list_path}: {e}")
+                        return
 
                     try:
                         with open(hash_path, 'w') as f:
                             f.write(new_hash)
                     except IOError as e:
                         self.logger.error(f"Error writing hash to {hash_path}: {e}")
+                        return
                 else:
                     self.logger.info('No update found')
         else:
@@ -146,7 +152,7 @@ class MALClient:
                 r.raise_for_status()
             except requests.HTTPError as e:
                 self.logger.error(f"Error fetching list: {e}")
-                return None
+                return
 
     def download_image(self, image_url, anime_id):
         r = requests.get(image_url)
@@ -166,8 +172,10 @@ class MALClient:
                 mal_list = json.load(f)
         except FileNotFoundError as e:
             self.logger.error(f"Error opening list file: {e}")
+            return
         except IOError as e:
             self.logger.error(f"Error reading list file: {e}")
+            return
 
         for anime in mal_list['data']:
             anime_id = anime["node"]["id"]
