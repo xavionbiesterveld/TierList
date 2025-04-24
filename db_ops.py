@@ -115,6 +115,46 @@ class db():
         self.cursor = self.conn.cursor()
         self.logger.debug(f"Checking if {name} exists in database: {self.db_name}")
 
+        try:
+            self.cursor.execute('''
+            SELECT * FROM tier_list WHERE song_title = ?
+            ''', (name,))
+
+            result = self.cursor.fetchone()
+            if result:
+                self.logger.debug(f"{name} exists in database")
+                return True
+            else:
+                self.logger.debug(f"{name} does not exist in database")
+                return False
+        except sqlite3.Error as e:
+            self.logger.error(f"Error checking if {name} exists: {e}")
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
+    def find_tier(self, tier):
+        self.conn = sqlite3.connect(self.db_name)
+        self.cursor = self.conn.cursor()
+        self.logger.debug(f"Finding {tier} tier in database: {self.db_name}")
+
+        try:
+            self.cursor.execute('''
+            SELECT * FROM tier_list WHERE tier = ?
+            ''', (tier,))
+            result = self.cursor.fetchall()
+            if result:
+                self.logger.debug(f"{tier} tier found in database")
+                return result
+            else:
+                self.logger.debug(f"{tier} tier not found in database")
+                return None
+        except sqlite3.Error as e:
+            self.logger.error(f"Error finding {tier} tier: {e}")
+        finally:
+            self.cursor.close()
+            self.conn.close()
+
 if __name__ == '__main__':
     db = db()
     db.refresh_db()

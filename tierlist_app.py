@@ -9,20 +9,82 @@ import os
 import re
 
 db = db()
+client = MALClient()
+logger = get_logger(__name__)
 
-class TierImage():
-    pass
+class TopButtonFrame(ctk.CTkFrame):
+    def __init__(self, parent, tier, fgcolor):
+        super().__init__(parent, fg_color=fgcolor, corner_radius=0)
+        self.tier = tier
+        self.fgcolor = fgcolor
+
+        self.canvas = tk.Canvas(self, highlightthickness=0, height=180, bg=fgcolor)  # height as needed
+        self.scrollbar = tk.Scrollbar(self, orient="horizontal", command=self.canvas.xview)
+        self.inner_frame = ctk.CTkFrame(self.canvas, fg_color=fgcolor, corner_radius=0)
+
+        self.inner_frame_id = self.canvas.create_window((0, 0), window=self.inner_frame, anchor="nw")
+        self.canvas.configure(xscrollcommand=self.scrollbar.set)
+
+        self.canvas.pack(side="top", fill="both", expand=True)
+        self.scrollbar.pack(side="bottom", fill="x")
+
+        # Configure resizing
+        self.inner_frame.bind("<Configure>", self._on_frame_configure)
+
+        self.create_image_buttons(tier, fgcolor)
+
+    def _on_frame_configure(self, event):
+        # Update scrollregion to match the true size of the inner_frame
+        self.canvas.configure(scrollregion=self.canvas.bbox("all"))
+
+    def create_image_buttons(self, tier, color):
+        # Remove previous widgets
+        for widget in self.inner_frame.winfo_children():
+            if widget != getattr(self, 'tier_label', None):
+                widget.destroy()
+
+        results = db.find_tier(tier)
+        if not results:
+            return
+
+        # Sort by sum of indices 10-13, descending
+        results = sorted(results, key=lambda item: sum(item[10:14]), reverse=True)
+
+        for col, result in enumerate(results):
+            pil_image = Image.open(f"images/{result[3]}.jpg")
+            image = CTkImage(pil_image, size=(106, 150))
+            image_button = ctk.CTkButton(
+                self.inner_frame,
+                image=image,
+                text="",
+                fg_color=color,
+                width=0,
+                hover_color=color
+            )
+            image_button.info = result
+            image_button.configure(command=lambda info=image_button.info:
+            logger.info(f"Name: {info[1]}; Total Score: {sum(info[10:14])}; Music Score: {info[10]}; Visual Score: {info[11]}; Narrative Score: {info[12]}; Memorability Score: {info[13]}"))
+
+            image_button.grid(row=0, column=col, pady=1, padx=1, sticky="n")
+
+
 
 class TierFrame(ctk.CTkFrame):
     def __init__(self, parent, fg_color, tier):
         super().__init__(parent, fg_color=fg_color, corner_radius=0)
 
-        self.tier_label = ctk.CTkLabel(self, text=tier, fg_color="#4482b8", font=("Arial", 22))
-        self.tier_label.configure(
-            compound="left",
+        self.tier_label = ctk.CTkLabel(
+            self,
+            text=tier,
+            fg_color="#4482b8",
+            font=("Arial", 22),
             text_color="white"
         )
         self.tier_label.place(relx=0, rely=0, relwidth=0.1, relheight=1)
+
+        self.button_frame = TopButtonFrame(self, tier, fg_color)
+        self.button_frame.place(relx=0.1, rely=0, relwidth=0.9, relheight=1)
+
 
 class TopFrame(ctk.CTkFrame):
     def __init__(self, parent):
@@ -45,10 +107,9 @@ class TopFrame(ctk.CTkFrame):
 
 
 class BottomFrame(ctk.CTkScrollableFrame):
-    def __init__(self, parent, mal_client):
+    def __init__(self, parent):
         super().__init__(parent, fg_color="#071f35", corner_radius=0)
 
-        self.client = mal_client
 
         def show_popup(info, refresh):
             popup = ctk.CTkToplevel(self)
@@ -89,7 +150,8 @@ class BottomFrame(ctk.CTkScrollableFrame):
                 visual_label.grid(row=0, column=0, sticky="s", padx=5, pady=(10, 2))
                 visual_score_var = tk.StringVar(value="1")
                 visual_entry = ctk.CTkOptionMenu(form_frame, variable=visual_score_var, values=[str(i) for i in range(1, 11)],
-                                                 fg_color="#ffc2d1", dropdown_fg_color="#ffc2d1", dropdown_text_color="#9d8189", text_color="#9d8189")
+                                                 fg_color="#ffc2d1", dropdown_fg_color="#ffc2d1", dropdown_text_color="#9d8189",
+                                                       text_color="#9d8189", button_color="#ff8fab", button_hover_color="#ff8fab")
                 visual_entry.grid(row=1, column=0, sticky="n", padx=5, pady=(2, 10))
 
                 # Music
@@ -97,7 +159,8 @@ class BottomFrame(ctk.CTkScrollableFrame):
                 music_label.grid(row=0, column=1, sticky="s", padx=5, pady=(10, 2))
                 music_score_var = tk.StringVar(value="1")
                 music_entry = ctk.CTkOptionMenu(form_frame, variable=music_score_var, values=[str(i) for i in range(1, 11)],
-                                                fg_color="#ffc2d1", dropdown_fg_color="#ffc2d1", dropdown_text_color="#9d8189", text_color="#9d8189")
+                                                fg_color="#ffc2d1", dropdown_fg_color="#ffc2d1", dropdown_text_color="#9d8189",
+                                                       text_color="#9d8189", button_color="#ff8fab", button_hover_color="#ff8fab")
                 music_entry.grid(row=1, column=1, sticky="n", padx=5, pady=(2, 10))
 
                 # Narrative
@@ -105,7 +168,8 @@ class BottomFrame(ctk.CTkScrollableFrame):
                 narrative_label.grid(row=2, column=0, sticky="s", padx=5, pady=(10, 2))
                 narrative_score_var = tk.StringVar(value="1")
                 narrative_entry = ctk.CTkOptionMenu(form_frame, variable=narrative_score_var, values=[str(i) for i in range(1, 11)],
-                                                    fg_color="#ffc2d1", dropdown_fg_color="#ffc2d1", dropdown_text_color="#9d8189", text_color="#9d8189")
+                                                    fg_color="#ffc2d1", dropdown_fg_color="#ffc2d1", dropdown_text_color="#9d8189",
+                                                     text_color="#9d8189", button_color="#ff8fab", button_hover_color="#ff8fab")
                 narrative_entry.grid(row=3, column=0, sticky="n", padx=5, pady=(2, 10))
 
                 # Memorability
@@ -113,7 +177,8 @@ class BottomFrame(ctk.CTkScrollableFrame):
                 memorability_label.grid(row=2, column=1, sticky="s", padx=5, pady=(10, 2))
                 memorability_score_var = tk.StringVar(value="1")
                 memorability_entry = ctk.CTkOptionMenu(form_frame, variable=memorability_score_var, values=[str(i) for i in range(1, 11)],
-                                                       fg_color="#ffc2d1", dropdown_fg_color="#ffc2d1", dropdown_text_color="#9d8189", text_color="#9d8189")
+                                                       fg_color="#ffc2d1", dropdown_fg_color="#ffc2d1", dropdown_text_color="#9d8189",
+                                                       text_color="#9d8189", button_color="#ff8fab", button_hover_color="#ff8fab")
                 memorability_entry.grid(row=3, column=1, sticky="n", padx=5, pady=(2, 10))
                 
                 def on_submit():
@@ -122,7 +187,7 @@ class BottomFrame(ctk.CTkScrollableFrame):
                     popup.destroy()
                     refresh()
 
-                submit_btn = ctk.CTkButton(form_frame, text="Submit", command=on_submit)
+                submit_btn = ctk.CTkButton(form_frame, text="Submit", command=on_submit, fg_color='#ffb3c6', hover_color='#ff8fab', text_color="#9d8189")
                 submit_btn.grid(row=4, column=0, columnspan=2, pady=(15, 5))
 
             row_num = 0
@@ -143,6 +208,16 @@ class BottomFrame(ctk.CTkScrollableFrame):
             form_frame = ctk.CTkFrame(popup, fg_color="#ffe5d9", corner_radius=0)
             form_frame.place(relx=0, rely=0.3, relwidth=1, relheight=0.7)
 
+        def refresh_images(self):
+            create_image_buttons(self)
+            app.top_frame.tier_frameS.button_frame.create_image_buttons("S",
+                                                                        app.top_frame.tier_frameS.button_frame.fgcolor)
+            app.top_frame.tier_frameA.button_frame.create_image_buttons("A",
+                                                                        app.top_frame.tier_frameA.button_frame.fgcolor)
+            app.top_frame.tier_frameB.button_frame.create_image_buttons("B",
+                                                                        app.top_frame.tier_frameB.button_frame.fgcolor)
+            app.top_frame.tier_frameC.button_frame.create_image_buttons("C",
+                                                                        app.top_frame.tier_frameC.button_frame.fgcolor)
 
         def create_image_buttons(self):
             for widget in self.winfo_children():
@@ -168,12 +243,22 @@ class BottomFrame(ctk.CTkScrollableFrame):
                         width=0,
                         hover_color="#071f35"
                     )
-                    image_button.info_dict = self.client.get_info(entry.name.replace(".jpg", ""))
-                    edit_opening_s(image_button.info_dict['opening_themes'])
+                    image_button.info_dict = client.get_info(entry.name.replace(".jpg", ""))
+                    try:
+                        edit_opening_s(image_button.info_dict['opening_themes'])
+                    except KeyError as e:
+                        logger.error(f"KeyError on {entry.name.replace(".jpg", "")}: {e}; Moving to next image")
+                        continue
+
 
                     #stop condition here
+                    filtered_openings = [opening for opening in image_button.info_dict['opening_themes']
+                                         if not db.find_if_exists(opening['text'])]
+                    if not filtered_openings:
+                        continue
+                    image_button.info_dict['opening_themes'] = filtered_openings
 
-                    image_button.configure(command=lambda info=image_button.info_dict: show_popup(info, lambda: create_image_buttons(self)))
+                    image_button.configure(command=lambda info=image_button.info_dict: show_popup(info, lambda: refresh_images(self)))
 
                     image_button.grid(row=row, column=col, pady=1, padx=1)
                     col += 1
@@ -190,33 +275,29 @@ class BottomFrame(ctk.CTkScrollableFrame):
 
 
 class App(ctk.CTk):
-    def __init__(self, mal_client, logger):
+    def __init__(self):
         super().__init__()
-
-        self.logger = logger
-        client = mal_client
-        if client.is_valid_token():
-            client.get_mal_list()
-            client.download_images()
-            client.get_anime_info()
-            client.cache_info()
-            self.logger.info("MAL Initialization Finished")
-        else:
-            self.logger.warning("Invalid access token")
 
         # App Frame
         self.title("Tier List")
-        self.geometry("1280x720")
+        self.geometry("1280x880")
 
         self.top_frame = TopFrame(self)
-        self.top_frame.place(relx=0, rely=0, relwidth=1, relheight=0.7)
+        self.top_frame.place(relx=0, rely=0, relwidth=1, relheight=0.82)
 
 
-        self.bottom_frame = BottomFrame(self, client)
-        self.bottom_frame.place(relx=0, rely=0.7, relwidth=1, relheight=0.3)
+        self.bottom_frame = BottomFrame(self)
+        self.bottom_frame.place(relx=0, rely=0.82, relwidth=1, relheight=0.18)
 
 
-client = MALClient()
-logger = get_logger(__name__)
-app = App(client, logger)
+
+if client.is_valid_token():
+    client.get_mal_list()
+    client.download_images()
+    client.get_anime_info()
+    client.cache_info()
+    logger.info("MAL Initialization Finished")
+else:
+    logger.warning("Invalid access token")
+app = App()
 app.mainloop()
