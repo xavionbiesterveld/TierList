@@ -198,7 +198,7 @@ class BottomFrame(ctk.CTkScrollableFrame):
                     font=("Arial", 16),
                     text_color="#9d8189",
                     fg_color="#ffcad4",
-                    hover_color="blue"
+                    hover_color="#ff8fab"
                 )
                 # Assign the correct command
                 opening_button.configure(command=lambda o=opening: show_form(form_frame, o, info, popup))
@@ -225,7 +225,7 @@ class BottomFrame(ctk.CTkScrollableFrame):
 
             def edit_opening_s(opening_text):
                 for opening in opening_text:
-                   opening['text'] = re.sub(r'#\d: |\([^()]*\)', '', opening['text'])
+                   opening['text'] = re.sub(r'\([^()]*\)|#.*?: ', '', opening['text'])
 
             MAX_PER_ROW = 10  # Set how many buttons per row
             row = 0
